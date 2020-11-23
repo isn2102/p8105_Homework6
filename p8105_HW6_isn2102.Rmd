@@ -29,7 +29,7 @@ set.seed(1)
 ### Problem 2 
 
 Import and clean data: 
-```{r}
+```{r, message = FALSE}
 birthweight_df <- 
   read_csv("./data/birthweight.csv") %>% 
   mutate(
@@ -69,6 +69,7 @@ na_summary %>% knitr::kable(digits = 5)
 ```
 
 **Model building process:**  
+
 1. Select a subset of variables that are expected to be related to birthweight based on theoretical knowledge: bhead, blength, delwt, fincome, gaweeks, momage, mrace, pnumlbw, pnumsga, ppbmi, smoken, wtgain  
 
 2. Look at plots to see the relationship between each possible predictor and the outcome. Choose predictors that have a linear relationship with the outcome to move forward.   
@@ -124,7 +125,8 @@ birthweight_df %>%
 
 (bhead_plot + blength_plot + delwt_plot + fincome_plot + gaweeks_plot + momage_plot + mrace_plot + pnumlbw_plot + pnumsga_plot + ppbmi_plot + smoken_plot + wtgain_plot + plot_layout(ncol = 4))
 ```
-From these plots we see that pnumlbw and pnumsga only have one value each for all observations (zero), so we will remove those two. Additionally, it looks like wtgain is not linear so we will remove that as well. Mrace can be coded as dummy variables so we will keep that in the model for now. 
+From these plots we see that pnumlbw and pnumsga only have one value each for all observations (zero), so we will remove those two. Additionally, it looks like wtgain is not linear so we will remove that as well. Mrace can be coded as dummy variables so we will keep that in the model for now.  
+
 
 3. Fit a bivariate linear model for each variable, and choose variables that seem like they may have a substantial relationship.
 ```{r}
@@ -190,6 +192,7 @@ geom_point()
 ```
 **Interpretation??**  
 
+
 Fit two additional models: 
 ```{r}
 model_blength_gaweeks <- lm(bwt ~ blength + gaweeks, data = birthweight_df)
@@ -198,11 +201,10 @@ model_interactions <- lm(bwt ~ bhead * blength * babysex, data = birthweight_df)
 summary(model_interactions)
 ```
 
-Compare the three models by using a cross-validation approach and assessing the prediction error RMSE.
-
-```{r, eval = FALSE}
+Compare the three models by using a cross-validation approach. First create a set of ten samples with crossv_mc, then convert to tibbles. Map each model across each sample dataframe, then calculate RMSE based on each fitted model and the testing portion of each sample from the original dataset. 
+```{r}
 cv_bw_df <- 
-  crossv_mc(birthweight_df, 100)
+  crossv_mc(birthweight_df, 10)
 
 cv_bw_df <-  
   cv_bw_df %>% 
@@ -225,27 +227,10 @@ cv_bw_df <-
   )
 ```
 
-Let's try to fit models and get RMSEs for them.
-First fit each type of model to every row in the dataset (to every individual iteration of the sample that we randomly drew). Produce root mean square errors for each model, mapping across two things which are the linear_mod and the rest dataset. 
-```{r, eval = FALSE}
-cv_df = 
-  cv_df %>% 
-  mutate(
-    linear_mod = map(.x = train, ~lm(y ~ x, data = .x)),
-    smooth_mod = map(.x = train, ~gam(y ~ s(x), data = .x)),
-    wiggly_mod = map(.x = train, ~gam(y ~ s(x, k = 30), sp = 10e-6, data = .x))
-  ) %>% 
-  mutate(
-    rmse_linear = map2_dbl(.x = linear_mod, .y = test, ~rmse(model = .x, data = .y)),
-    rmse_smooth = map2_dbl(.x = smooth_mod, .y = test, ~rmse(model = .x, data = .y)),
-    rmse_wiggly = map2_dbl(.x = wiggly_mod, .y = test, ~rmse(model = .x, data = .y))
-  )
-```
+Assess RMSE to see which model is best. Pivot data to tidy, visualize distribution, and calculate the mean RMSE. Because the smallest distribution is for the prelim5 model which I initially fit, and because we can see that prelim5 also has the smallest average RMSE, we can conclude that prelim5 predicts birthweight the best in our test data.
 
-Now we actually want to understand which model is better, using the root mean square errors. Pivot data to get a tidy dataset. Then plot each one to see the distribution. The smallest distribution is for the smooth model, so we might conclude this one makes the best predictions on test data.
-
-```{r, eval = FALSE}
-cv_df %>% 
+```{r}
+cv_bw_df %>% 
   select(starts_with("rmse")) %>% 
   pivot_longer(
     everything(),
@@ -255,12 +240,8 @@ cv_df %>%
   ) %>% 
   ggplot(aes(x = model, y = rmse)) +
   geom_violin()
-```
 
-Compute averages:
-
-```{r, eval = FALSE}
-cv_df %>% 
+cv_bw_df %>% 
   select(starts_with("rmse")) %>% 
   pivot_longer(
     everything(),
@@ -269,14 +250,16 @@ cv_df %>%
     names_prefix = "rmse_"
   ) %>% 
   group_by(model) %>% 
-  summarize(avg_rmse = mean(rmse))
+  summarize(avg_rmse = mean(rmse)) %>% 
+  knitr::kable(digits = 5)
+  
 ```
 
 
 ###Problem 3  
 
-For this problem, we’ll use the 2017 Central Park weather data that we’ve seen elsewhere. The code chunk below (adapted from the course website) will download these data.
-```{r}
+Create data and clean: 
+```{r, message = FALSE}
 weather_df <- 
   rnoaa::meteo_pull_monitors(
     c("USW00094728"),
@@ -290,14 +273,39 @@ weather_df <-
   select(name, id, everything())
 ```
 
-The boostrap is helpful when you’d like to perform inference for a parameter / value / summary that doesn’t have an easy-to-write-down distribution in the usual repeated sampling framework. We’ll focus on a simple linear regression with tmax as the response and tmin as the predictor, and are interested in the distribution of two quantities estimated from these data:
+Use 5000 bootstrap samples and produce an estimate for r^2 and log(beta0xbeta1) for each bootstrap sample. First create a helper function to extract log(beta0xbeta1). 
 
-r̂ 2
-log(β̂ 0∗β̂ 1)
-Use 5000 bootstrap samples and, for each bootstrap sample, produce estimates of these two quantities. Plot the distribution of your estimates, and describe these in words. Using the 5000 bootstrap estimates, identify the 2.5% and 97.5% quantiles to provide a 95% confidence interval for r̂ 2 and log(β̂ 0∗β̂ 1). Note: broom::glance() is helpful for extracting r̂ 2 from a fitted regression, and broom::tidy() (with some additional wrangling) should help in computing log(β̂ 0∗β̂ 1).
+```{r}
+beta_extract = function(ls) {
+  broom::tidy(ls) %>% 
+  select(term, estimate) %>% 
+    pivot_wider(names_from = term, values_from = estimate) %>% 
+    janitor::clean_names() %>% 
+    mutate(
+      log_betas = log(intercept*tmin))
+}
+```
 
+```{r}
+weather_df %>% 
+  bootstrap(10, id = "strap_number") %>% 
+  mutate(
+    models = map(.x = strap, ~lm(tmax ~ tmin, data = .x)), 
+    b_results = map(models, beta_extract), 
+    r_results = map(models, broom::glance)
+  ) %>% 
+  select(strap_number, b_results, r_results) %>% 
+  unnest(b_results, r_results) %>% 
+  select(strap_number, r.squared, log_betas)
+```
+
+Plot the distribution of the estimates, **and describe these in words**.
 ```{r}
 
 ```
+
+Using the 5000 bootstrap estimates, identify the 2.5% and 97.5% quantiles to provide a 95% confidence interval for r̂ 2 and log(β̂ 0∗β̂ 1
+
+
 
 
