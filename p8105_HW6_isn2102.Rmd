@@ -7,6 +7,9 @@ output: github_document
 
 ```{r setup, include = FALSE}
 library(tidyverse)
+library(patchwork)
+library(modelr)
+library(mgcv)
 
 knitr::opts_chunk$set(
   fig.width = 6,
@@ -23,67 +26,258 @@ scale_fill_discrete = scale_fill_viridis_d
 set.seed(1)
 ```
 
-### Problem 2  
-In this problem, you will analyze data gathered to understand the effects of several variables on a child’s birthweight. This dataset, available here, consists of roughly 4000 children and includes the following variables:
-
-babysex: baby’s sex (male = 1, female = 2)
-bhead: baby’s head circumference at birth (centimeters)
-blength: baby’s length at birth (centimeteres)
-bwt: baby’s birth weight (grams)
-delwt: mother’s weight at delivery (pounds)
-fincome: family monthly income (in hundreds, rounded)
-frace: father’s race (1 = White, 2 = Black, 3 = Asian, 4 = Puerto Rican, 8 = Other, 9 = Unknown)
-gaweeks: gestational age in weeks
-malform: presence of malformations that could affect weight (0 = absent, 1 = present)
-menarche: mother’s age at menarche (years)
-mheigth: mother’s height (inches)
-momage: mother’s age at delivery (years)
-mrace: mother’s race (1 = White, 2 = Black, 3 = Asian, 4 = Puerto Rican, 8 = Other)
-parity: number of live births prior to this pregnancy
-pnumlbw: previous number of low birth weight babies
-pnumgsa: number of prior small for gestational age babies
-ppbmi: mother’s pre-pregnancy BMI
-ppwt: mother’s pre-pregnancy weight (pounds)
-smoken: average number of cigarettes smoked per day during pregnancy
-wtgain: mother’s weight gain during pregnancy (pounds)
-Load and clean the data for regression analysis (i.e. convert numeric to factor where appropriate, check for missing data, etc.).
+### Problem 2 
 
 Import and clean data: 
 ```{r}
 birthweight_df <- 
-  read_csv("./data/birthweight.csv")
+  read_csv("./data/birthweight.csv") %>% 
+  mutate(
+    babysex = as.factor(babysex), 
+    frace = as.factor(frace), 
+    malform = as.factor(malform), 
+    mrace = as.factor(mrace)
+  ) 
 ```
 
-Propose a regression model for birthweight. This model may be based on a hypothesized structure for the factors that underly birthweight, on a data-driven model-building process, or a combination of the two. Describe your modeling process and show a plot of model residuals against fitted values – use add_predictions and add_residuals in making this plot.
+Check for missing variables: none. 
+```{r}
+na_summary <- 
+  birthweight_df %>% 
+  summarise(babysex_na = sum(is.na(babysex)), 
+            bhead_na = sum(is.na(bhead)),
+            blength_na = sum(is.na(blength)),
+            bwt_na = sum(is.na(bwt)),
+            delwt_na = sum(is.na(delwt)),
+            fincome_na = sum(is.na(fincome)),
+            frace_na = sum(is.na(frace)),
+            gaweeks_na = sum(is.na(gaweeks)),
+            malform_na = sum(is.na(malform)),
+            menarche_na = sum(is.na(menarche)),
+            mheigth_na = sum(is.na(mheight)),
+            momage_na = sum(is.na(momage)),
+            mrace_na = sum(is.na(mrace)),
+            parity_na = sum(is.na(parity)),
+            pnumlbw_na = sum(is.na(pnumlbw)),
+            pnumgsa_na = sum(is.na(pnumsga)),
+            ppbmi_na = sum(is.na(ppbmi)),
+            ppwt_na = sum(is.na(ppwt)),
+            smoken_na = sum(is.na(smoken)),
+            wtgain_na = sum(is.na(wtgain)),
+  )
+na_summary %>% knitr::kable(digits = 5)
+```
 
-Model building process:  
-1. Select a subset of variables that are expected to be related to birthweight based on theoretical knowledge.  
-2. Look at plots to see the relationship between each possible predictor and the outcome. Choose predictors that have a linear relationship with the outcome, and show a p-value for the relationship under ~0.25.  
+**Model building process:**  
+1. Select a subset of variables that are expected to be related to birthweight based on theoretical knowledge: bhead, blength, delwt, fincome, gaweeks, momage, mrace, pnumlbw, pnumsga, ppbmi, smoken, wtgain  
+
+2. Look at plots to see the relationship between each possible predictor and the outcome. Choose predictors that have a linear relationship with the outcome to move forward.   
+```{r}
+bhead_plot <-
+birthweight_df %>% 
+  ggplot(aes(x = bhead, y = bwt)) + 
+  geom_point()
+blength_plot <-
+birthweight_df %>% 
+  ggplot(aes(x = blength, y = bwt)) + 
+  geom_point()
+delwt_plot <-
+birthweight_df %>% 
+  ggplot(aes(x = delwt, y = bwt)) + 
+  geom_point()
+fincome_plot <-
+birthweight_df %>% 
+  ggplot(aes(x = fincome, y = bwt)) + 
+  geom_point()
+gaweeks_plot <-
+birthweight_df %>% 
+  ggplot(aes(x = gaweeks, y = bwt)) + 
+  geom_point()
+momage_plot <-
+birthweight_df %>% 
+  ggplot(aes(x = momage, y = bwt)) + 
+  geom_point()
+mrace_plot <-
+birthweight_df %>% 
+  ggplot(aes(x = mrace, y = bwt)) + 
+  geom_point()
+pnumlbw_plot <-
+birthweight_df %>% 
+  ggplot(aes(x = pnumlbw, y = bwt)) + 
+  geom_point()
+pnumsga_plot <-
+birthweight_df %>% 
+  ggplot(aes(x = pnumsga, y = bwt)) + 
+  geom_point()
+ppbmi_plot <-
+birthweight_df %>% 
+  ggplot(aes(x = ppbmi, y = bwt)) + 
+  geom_point()
+smoken_plot <-
+birthweight_df %>% 
+  ggplot(aes(x = smoken, y = bwt)) + 
+  geom_point()
+wtgain_plot <-
+birthweight_df %>% 
+  ggplot(aes(x = wtgain, y = bwt)) + 
+  geom_point()
+
+(bhead_plot + blength_plot + delwt_plot + fincome_plot + gaweeks_plot + momage_plot + mrace_plot + pnumlbw_plot + pnumsga_plot + ppbmi_plot + smoken_plot + wtgain_plot + plot_layout(ncol = 4))
+```
+From these plots we see that pnumlbw and pnumsga only have one value each for all observations (zero), so we will remove those two. Additionally, it looks like wtgain is not linear so we will remove that as well. Mrace can be coded as dummy variables so we will keep that in the model for now. 
+
+3. Fit a bivariate linear model for each variable, and choose variables that seem like they may have a substantial relationship.
+```{r}
+bhead_biv <- lm(bwt ~ bhead, data = birthweight_df)
+broom::tidy(bhead_biv) %>% knitr::kable(digits = 5)
+
+blength_biv <- lm(bwt ~ blength, data = birthweight_df)
+broom::tidy(blength_biv) %>% knitr::kable(digits = 5)
+
+delwt_biv <- lm(bwt ~ delwt, data = birthweight_df)
+broom::tidy(delwt_biv) %>% knitr::kable(digits = 5)
+
+fincome_biv <- lm(bwt ~ fincome, data = birthweight_df)
+broom::tidy(fincome_biv) %>% knitr::kable(digits = 5)
+
+gaweeks_biv <- lm(bwt ~ gaweeks, data = birthweight_df)
+broom::tidy(gaweeks_biv) %>% knitr::kable(digits = 5)
+
+momage_biv <- lm(bwt ~ momage, data = birthweight_df)
+broom::tidy(momage_biv) %>% knitr::kable(digits = 5)
+
+mrace_biv <- lm(bwt ~ mrace, data = birthweight_df)
+broom::tidy(mrace_biv) %>% knitr::kable(digits = 5)
+
+ppbmi_biv <- lm(bwt ~ ppbmi, data = birthweight_df)
+broom::tidy(ppbmi_biv) %>% knitr::kable(digits = 5)
+
+smoken_biv <- lm(bwt ~ smoken, data = birthweight_df)
+broom::tidy(smoken_biv) %>% knitr::kable(digits = 5)
+```
+From this exploration we can see that all variables tested had p-values that were very small (most show up as zero). 
+
 3. Fit a preliminary model with all these predictors.  
-4. Look at the wald statistic for each variable to see significant ones. Also remove predictor from model and if the other parameter estimates change, keep variable in the model. Remove variables that do not change other estimates much when removing them, or with insignificant wald p-values.  
-5. Check assumptions of independence of observations, normality of residuals, heteroscedasticity, and also check for multi-colinearity.  
-
 ```{r}
-
+prelim_model <- lm(bwt ~ bhead + blength + delwt + fincome + gaweeks + momage + mrace + ppbmi + smoken, data = birthweight_df)
 ```
 
-Compare your model to two others:
-
-One using length at birth and gestational age as predictors (main effects only)
-One using head circumference, length, sex, and all interactions (including the three-way interaction) between these
-Make this comparison in terms of the cross-validated prediction error; use crossv_mc and functions in purrr as appropriate.
-
+4. Look at the t test statistic for each variable to see significant ones. Also remove predictor from model and if the other parameter estimates change, keep variable in the model. Remove variables that do not change other estimates much when removing them, or with insignificant p-values.  
 ```{r}
+summary(prelim_model) 
 
+prelim_model2 <- lm(bwt ~ bhead + blength + delwt + gaweeks + mrace + ppbmi + smoken, data = birthweight_df)
+summary(prelim_model2)
+
+prelim_model3 <- lm(bwt ~ bhead + blength + delwt + gaweeks + ppbmi + mrace, data = birthweight_df)
+summary(prelim_model3)
+
+prelim_model4 <- lm(bwt ~ bhead + blength + delwt + gaweeks + mrace, data = birthweight_df)
+summary(prelim_model4)
+
+prelim_model5 <- lm(bwt ~ bhead + blength + gaweeks + mrace, data = birthweight_df)
+summary(prelim_model5)
+```
+From this regression output we see that fincome and momage are not significant anymore so we will remove those. I removed smoken, delwt, and ppbmi variables and the other coefficients didn't change much, and the R^2 is still very high (0.70 compared to 0.72 with the "full" model) so I will keep those variables out of model. My final model includes bhead, blength, gaweeks, and mrace.
+
+Plot model residuals against fitted values:
+```{r}
+birthweight_df %>% 
+add_residuals(prelim_model5) %>% 
+add_predictions(prelim_model5) %>% 
+ggplot(aes(x = pred, y = resid)) + 
+geom_point()
+```
+**Interpretation??**  
+
+Fit two additional models: 
+```{r}
+model_blength_gaweeks <- lm(bwt ~ blength + gaweeks, data = birthweight_df)
+summary(model_blength_gaweeks)
+model_interactions <- lm(bwt ~ bhead * blength * babysex, data = birthweight_df)
+summary(model_interactions)
 ```
 
-Note that although we expect your model to be reasonable, model building itself is not a main idea of the course and we don’t necessarily expect your model to be “optimal”.
+Compare the three models by using a cross-validation approach and assessing the prediction error RMSE.
+
+```{r, eval = FALSE}
+cv_bw_df <- 
+  crossv_mc(birthweight_df, 100)
+
+cv_bw_df <-  
+  cv_bw_df %>% 
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble)
+  )
+
+cv_bw_df <- 
+  cv_bw_df %>% 
+  mutate(
+    interactions_mod = map(.x = train, ~lm(bwt ~ bhead * blength * babysex, data = .x)),
+    blength_gaweeks_mod = map(.x = train, ~lm(bwt ~ blength + gaweeks, data = .x)),
+    prelim5_mod = map(.x = train, ~lm(bwt ~ bhead + blength + gaweeks + mrace, data = .x))
+  ) %>% 
+  mutate(
+    rmse_interactions = map2_dbl(.x = interactions_mod, .y = test, ~rmse(model = .x, data = .y)),
+    rmse_blength_gaweeks = map2_dbl(.x = blength_gaweeks_mod, .y = test, ~rmse(model = .x, data = .y)),
+    rmse_prelim5 = map2_dbl(.x = prelim5_mod, .y = test, ~rmse(model = .x, data = .y))
+  )
+```
+
+Let's try to fit models and get RMSEs for them.
+First fit each type of model to every row in the dataset (to every individual iteration of the sample that we randomly drew). Produce root mean square errors for each model, mapping across two things which are the linear_mod and the rest dataset. 
+```{r, eval = FALSE}
+cv_df = 
+  cv_df %>% 
+  mutate(
+    linear_mod = map(.x = train, ~lm(y ~ x, data = .x)),
+    smooth_mod = map(.x = train, ~gam(y ~ s(x), data = .x)),
+    wiggly_mod = map(.x = train, ~gam(y ~ s(x, k = 30), sp = 10e-6, data = .x))
+  ) %>% 
+  mutate(
+    rmse_linear = map2_dbl(.x = linear_mod, .y = test, ~rmse(model = .x, data = .y)),
+    rmse_smooth = map2_dbl(.x = smooth_mod, .y = test, ~rmse(model = .x, data = .y)),
+    rmse_wiggly = map2_dbl(.x = wiggly_mod, .y = test, ~rmse(model = .x, data = .y))
+  )
+```
+
+Now we actually want to understand which model is better, using the root mean square errors. Pivot data to get a tidy dataset. Then plot each one to see the distribution. The smallest distribution is for the smooth model, so we might conclude this one makes the best predictions on test data.
+
+```{r, eval = FALSE}
+cv_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(),
+    names_to = "model",
+    values_to = "rmse",
+    names_prefix = "rmse_"
+  ) %>% 
+  ggplot(aes(x = model, y = rmse)) +
+  geom_violin()
+```
+
+Compute averages:
+
+```{r, eval = FALSE}
+cv_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(),
+    names_to = "model",
+    values_to = "rmse",
+    names_prefix = "rmse_"
+  ) %>% 
+  group_by(model) %>% 
+  summarize(avg_rmse = mean(rmse))
+```
+
 
 ###Problem 3  
 
 For this problem, we’ll use the 2017 Central Park weather data that we’ve seen elsewhere. The code chunk below (adapted from the course website) will download these data.
 ```{r}
-weather_df = 
+weather_df <- 
   rnoaa::meteo_pull_monitors(
     c("USW00094728"),
     var = c("PRCP", "TMIN", "TMAX"), 
