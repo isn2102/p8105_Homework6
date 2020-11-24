@@ -125,6 +125,7 @@ birthweight_df %>%
 
 (bhead_plot + blength_plot + delwt_plot + fincome_plot + gaweeks_plot + momage_plot + mrace_plot + pnumlbw_plot + pnumsga_plot + ppbmi_plot + smoken_plot + wtgain_plot + plot_layout(ncol = 4))
 ```
+
 From these plots we see that pnumlbw and pnumsga only have one value each for all observations (zero), so we will remove those two. Additionally, it looks like wtgain is not linear so we will remove that as well. Mrace can be coded as dummy variables so we will keep that in the model for now.  
 
 
@@ -157,14 +158,15 @@ broom::tidy(ppbmi_biv) %>% knitr::kable(digits = 5)
 smoken_biv <- lm(bwt ~ smoken, data = birthweight_df)
 broom::tidy(smoken_biv) %>% knitr::kable(digits = 5)
 ```
+
 From this exploration we can see that all variables tested had p-values that were very small (most show up as zero). 
 
-3. Fit a preliminary model with all these predictors.  
+4. Fit a preliminary model with all these predictors.  
 ```{r}
 prelim_model <- lm(bwt ~ bhead + blength + delwt + fincome + gaweeks + momage + mrace + ppbmi + smoken, data = birthweight_df)
 ```
 
-4. Look at the t test statistic for each variable to see significant ones. Also remove predictor from model and if the other parameter estimates change, keep variable in the model. Remove variables that do not change other estimates much when removing them, or with insignificant p-values.  
+5. Look at the t test statistic for each variable to see significant ones. Also remove predictor from model and if the other parameter estimates change, keep variable in the model. Remove variables that do not change other estimates much when removing them, or with insignificant p-values.  
 ```{r}
 summary(prelim_model) 
 
@@ -180,6 +182,7 @@ summary(prelim_model4)
 prelim_model5 <- lm(bwt ~ bhead + blength + gaweeks + mrace, data = birthweight_df)
 summary(prelim_model5)
 ```
+
 From this regression output we see that fincome and momage are not significant anymore so we will remove those. I removed smoken, delwt, and ppbmi variables and the other coefficients didn't change much, and the R^2 is still very high (0.70 compared to 0.72 with the "full" model) so I will keep those variables out of model. My final model includes bhead, blength, gaweeks, and mrace.
 
 Plot model residuals against fitted values:
@@ -190,6 +193,7 @@ add_predictions(prelim_model5) %>%
 ggplot(aes(x = pred, y = resid)) + 
 geom_point()
 ```
+
 **Interpretation??**  
 
 
@@ -227,8 +231,7 @@ cv_bw_df <-
   )
 ```
 
-Assess RMSE to see which model is best. Pivot data to tidy, visualize distribution, and calculate the mean RMSE. Because the smallest distribution is for the prelim5 model which I initially fit, and because we can see that prelim5 also has the smallest average RMSE, we can conclude that prelim5 predicts birthweight the best in our test data.
-
+Assess RMSE to see which model is best. Pivot data to tidy, visualize distribution, and calculate the mean RMSE.
 ```{r}
 cv_bw_df %>% 
   select(starts_with("rmse")) %>% 
@@ -255,8 +258,10 @@ cv_bw_df %>%
   
 ```
 
+Because the smallest distribution of RMSE is for the prelim5 model which I initially fit, and because we can see that prelim5 also has the smallest average RMSE, we can conclude that prelim5 predicts birthweight the best in our test data.
 
-###Problem 3  
+
+### Problem 3  
 
 Create data and clean: 
 ```{r, message = FALSE}
@@ -273,7 +278,7 @@ weather_df <-
   select(name, id, everything())
 ```
 
-Use 5000 bootstrap samples and produce an estimate for r^2 and log(beta0xbeta1) for each bootstrap sample. First create a helper function to extract log(beta0xbeta1). 
+Use 5000 bootstrap samples and produce an estimate for r^2 and log(beta0xbeta1) for each bootstrap sample. First create a helper function to create log(beta0xbeta1) from the broom::tidy results. Then map my linear model with tmax and tmin, broom:glance, and my function to each bootstrap sample. Unnest results and select the ones I want.
 
 ```{r}
 beta_extract = function(ls) {
@@ -287,8 +292,9 @@ beta_extract = function(ls) {
 ```
 
 ```{r}
+bs_weather_df <-
 weather_df %>% 
-  bootstrap(10, id = "strap_number") %>% 
+  bootstrap(5000, id = "strap_number") %>% 
   mutate(
     models = map(.x = strap, ~lm(tmax ~ tmin, data = .x)), 
     b_results = map(models, beta_extract), 
@@ -299,13 +305,41 @@ weather_df %>%
   select(strap_number, r.squared, log_betas)
 ```
 
-Plot the distribution of the estimates, **and describe these in words**.
+Plot the distribution of the estimates.
 ```{r}
+hist_r.squared <-
+bs_weather_df %>% 
+  ggplot(aes(x = r.squared)) +
+  geom_density(fill = "mediumpurple", color = "mediumpurple", alpha = 0.8)
 
+hist_log_betas <-
+  bs_weather_df %>% 
+  ggplot(aes(x = log_betas)) +
+  geom_density(fill = "turquoise3",color = "turquoise3", alpha = 0.8)
+
+hist_r.squared + hist_log_betas
 ```
 
-Using the 5000 bootstrap estimates, identify the 2.5% and 97.5% quantiles to provide a 95% confidence interval for r̂ 2 and log(β̂ 0∗β̂ 1
+The distribution of r.squared is bell-shaped but is skewed more to the left than a normal curve. It is centered around 0.91. The distribution of log(beta0*beta1) is more normally shaped and centered around 2.01. 
 
+
+Find the 95% confidence intervals for the estimates. 
+```{r}
+bs_weather_df %>% 
+  pivot_longer(
+    r.squared:log_betas, 
+    names_to = "Estimate", 
+    values_to = "Value"
+  ) %>% 
+  group_by(Estimate) %>% 
+  summarize(
+    ci_lower = quantile(Value, 0.025),
+    ci_upper = quantile(Value, 0.975)
+  ) %>% 
+  knitr::kable(digits = 5)
+```
+
+The 95% confidence interval for r^2 is (1.965, 2.059) and the 95% confidence interval for log(beta0*beta1) is (0.893, 0.927). 
 
 
 
