@@ -111,45 +111,13 @@ birthweight_df <-
   ) 
 ```
 
-Check for missing variables: none. Can try to figure out a way to do this in a function so it's not as much typing, but not exactly sure how to do that yet, in progress. 
+Check for missing variables: based on the below function to find NAs, there are none for any variable.
 ```{r}
-variable_list <- names(birthweight_df)
-
-find_nas = function(df, variable) {
-  df %>% 
-    summarise(
-      na_num = sum(is.na("variable")))
-}
-
-#output_df = map(output_list, bind_rows))
-#na_summary <- 
-#  variable_list %>% 
-#  map(variable_list, find_nas(df = birthweight_df, ))
-
-na_summary <- 
+find_na <-
   birthweight_df %>% 
-  summarise(babysex_na = sum(is.na(babysex)), 
-            bhead_na = sum(is.na(bhead)),
-            blength_na = sum(is.na(blength)),
-            bwt_na = sum(is.na(bwt)),
-            delwt_na = sum(is.na(delwt)),
-            fincome_na = sum(is.na(fincome)),
-            frace_na = sum(is.na(frace)),
-            gaweeks_na = sum(is.na(gaweeks)),
-            malform_na = sum(is.na(malform)),
-            menarche_na = sum(is.na(menarche)),
-            mheigth_na = sum(is.na(mheight)),
-            momage_na = sum(is.na(momage)),
-            mrace_na = sum(is.na(mrace)),
-            parity_na = sum(is.na(parity)),
-            pnumlbw_na = sum(is.na(pnumlbw)),
-            pnumgsa_na = sum(is.na(pnumsga)),
-            ppbmi_na = sum(is.na(ppbmi)),
-            ppwt_na = sum(is.na(ppwt)),
-            smoken_na = sum(is.na(smoken)),
-            wtgain_na = sum(is.na(wtgain)),
-  )
-na_summary %>% knitr::kable(digits = 5)
+  map_df(~sum(is.na(.)))
+
+find_na
 ```
 
 **Model building process:**  
@@ -243,7 +211,7 @@ smoken_biv <- lm(bwt ~ smoken, data = birthweight_df)
 broom::tidy(smoken_biv) %>% knitr::kable(digits = 5)
 ```
 
-From this exploration we can see that all variables tested had p-values that were very small (most show up as zero). 
+From this exploration we can see that all variables tested had p-values that were very small (most show up as zero) so I will keep all of them. 
 
 4. Fit a preliminary model with all these predictors.  
 ```{r}
@@ -267,7 +235,7 @@ prelim_model5 <- lm(bwt ~ bhead + blength + gaweeks + mrace, data = birthweight_
 summary(prelim_model5)
 ```
 
-From this regression output we see that fincome and momage are not significant anymore so we will remove those. I removed smoken, delwt, and ppbmi variables and the other coefficients didn't change much, and the R^2 is still very high (0.70 compared to 0.72 with the "full" model) so I will keep those variables out of model. My final model includes bhead, blength, gaweeks, and mrace.
+From this regression output we see that fincome and momage are not significant anymore so we will remove those. I removed smoken, delwt, and ppbmi variables and the other coefficients didn't change much, and the R^2 is still very high (0.70 compared to 0.72 with the "full" model) so I will keep those variables out of model. My final model (prelim_model5) includes bhead, blength, gaweeks, and mrace.
 
 Plot model residuals against fitted values:
 ```{r}
@@ -284,8 +252,8 @@ birthweight_df %>%
   
 ```
 
-**Interpretation??**  
-Look to see if residuals are normally distributed using geom_density (symmetric). Then look at residuals plotted against one of the predictors. We want to see points centered around zero and have generally even spread. If you have some dots that are further from zero in one area then you might not have a great model fit. Don't want to see any residuals that are real outliers. Also you don't really want to see a clear pattern because that might indicate that you don't have a linear relationship. 
+**Interpretation**  
+From the density plot it seems like the residuals are normally distributed which indicates the model fits well. I also looked at residuals plotted against predicted values. We see most of the residual points are centered around zero and have generally even spread, also indicating a pretty good fit. There are a few dots that appear to be outliers and are quite far from zero, indicating that the model may not fit as well as it could. There is no apparent pattern that I can see. 
 
 Fit two additional models: 
 ```{r}
@@ -295,10 +263,10 @@ model_interactions <- lm(bwt ~ bhead * blength * babysex, data = birthweight_df)
 summary(model_interactions)
 ```
 
-Compare the three models by using a cross-validation approach. First create a set of ten samples with crossv_mc, then convert to tibbles. Map each model across each sample dataframe, then calculate RMSE based on each fitted model and the testing portion of each sample from the original dataset. 
+Compare the three models by using a cross-validation approach. First create a set of 100 samples with crossv_mc, then convert to tibbles. Map each model across each sample dataframe, then calculate RMSE based on each fitted model and the testing portion of each sample from the original dataset. 
 ```{r}
 cv_bw_df <- 
-  crossv_mc(birthweight_df, 10)
+  crossv_mc(birthweight_df, 100)
 
 cv_bw_df <-  
   cv_bw_df %>% 
@@ -400,12 +368,18 @@ Plot the distribution of the estimates.
 hist_r.squared <-
 bs_weather_df %>% 
   ggplot(aes(x = r.squared)) +
-  geom_density(fill = "mediumpurple", color = "mediumpurple", alpha = 0.8)
+  geom_density(fill = "mediumpurple", color = "mediumpurple", alpha = 0.8) +
+  labs(
+    title = "Density plot of r squared values"
+  )
 
 hist_log_betas <-
   bs_weather_df %>% 
   ggplot(aes(x = log_betas)) +
-  geom_density(fill = "turquoise3",color = "turquoise3", alpha = 0.8)
+  geom_density(fill = "turquoise3",color = "turquoise3", alpha = 0.8) +
+  labs(
+    title = "Density plot of log(beta0*beta1) values"
+  )
 
 hist_r.squared + hist_log_betas
 ```
